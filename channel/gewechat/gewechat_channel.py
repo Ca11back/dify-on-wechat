@@ -110,24 +110,44 @@ class GeWeChatChannel(ChatChannel):
         gewechat_message = context.get("msg")
         if reply.type in [ReplyType.TEXT, ReplyType.ERROR, ReplyType.INFO]:
             reply_text = reply.content
+
+            # 如果不需要回复 
+            if '$NO_REPLY$' in reply_text:
+                return
+
             ats = []
             if gewechat_message and gewechat_message.is_group and not conf().get("no_need_at", False):
                 ats.append(gewechat_message.actual_user_id)
 
-            pattern = r'@([^@]+)@([^@\s]+)\s'
-            matches = re.findall(pattern, reply_text)
+            #pattern = r'@([^@]+)@([^@\s]+)\s'
+            #matches = re.findall(pattern, reply_text)
         
             # 处理匹配到的内容
-            for match in matches:
-                nick_name, user_id = match
+            #for match in matches:
+            #    nick_name, user_id = match
                 # 移除文本中的userid部分，仅保留@用户名
-                reply_text = reply_text.replace(f"@{nick_name}@{user_id} ", f"@{nick_name} ")
+            #    reply_text = reply_text.replace(f"@{nick_name}@{user_id} ", f"@{nick_name} ")
             
-                ats.append(user_id)
+            #    ats.append(user_id)
             ats = ",".join(ats)
-            logger.info(f"[gewechat] {ats}")
+            logger.info(f"[gewechat] Ats:{ats}")
+
+            # 附件支持
+            pattern = r'\$ATTACH:(.*?)\|(.*?);'
+            # Extract all URLs
+            attachments = re.findall(pattern, reply_text)
+            attachments = [{"name": name, "url": url} for name, url in attachments]
+            # Remove all $ATTACH:XXX; from the text
+            reply_text = re.sub(r'\$ATTACH:.*?;','', reply_text)
+
             self.client.post_text(self.app_id, receiver, reply_text, ats)
             logger.info("[gewechat] Do send text to {}: {}".format(receiver, reply_text))
+
+            # 附件支持
+            for attachment in attachments:
+                result = self.client.post_file(self.app_id, receiver, file_url=attachment['url'], file_name=attachment['name'])
+                logger.info("[gewechat] sendAttachment, receiver={}, file_url={}, file_name={}, result={}".format(
+                    receiver, attachment['url'], attachment['name'], result))
         elif reply.type == ReplyType.VOICE:
             try:
                 content = reply.content
